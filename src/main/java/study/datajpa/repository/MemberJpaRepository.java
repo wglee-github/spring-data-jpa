@@ -37,12 +37,27 @@ public class MemberJpaRepository {
 		return Optional.ofNullable(member);
 	}
 	
-	public Long count() {
+	public long count() {
 		return em.createQuery("select count(m) from Member m", Long.class)
 				.getSingleResult();
 	}
 	
 	public Member find(Long memberId){
 		return em.find(Member.class, memberId);
+	}
+	
+	// 메소드명 쿼리 예
+	public List<Member> findByUsernameAndAgeGreaterThen(String username, int age){
+		return em.createQuery("select m from Member m where m.username = :username and m.age > :age", Member.class)
+				.setParameter("username", username)
+				.setParameter("age", age)
+				.getResultList();
+	}
+	
+	// NamedQuery 예
+	public List<Member> findByUsername(String username){
+		return em.createNamedQuery("Member.findByUsername", Member.class)
+				.setParameter("username", username)
+				.getResultList();
 	}
 }

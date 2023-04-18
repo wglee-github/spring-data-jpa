@@ -1,15 +1,9 @@
 package study.datajpa.repository;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import study.datajpa.entity.Team;
 
-@Repository
-public class TeamRepository {
+public interface TeamRepository extends JpaRepository<Team, Long> {
 
-	@PersistenceContext
-	private EntityManager em;
-	
-	
 }

@@ -7,6 +7,9 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedNativeQuery;
+import jakarta.persistence.NamedQueries;
+import jakarta.persistence.NamedQuery;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,6 +20,8 @@ import lombok.ToString;
 @Getter @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @ToString(of = {"id", "username", "age"})
+// @NamedQuery 장점 - 애플리케이션 로딩 시점에 해당 쿼리를 한번 파싱해 본다. 따라서 문법 오류가 있는경우 오류를 알려주고, 애플리케이션 로딩 되지 않음.
+@NamedQuery(name = "Member.findByUsername", query = "select m from Member m where m.username = :username")
 public class Member {
 
 	@Id @GeneratedValue
@@ -45,15 +50,23 @@ public class Member {
 //	protected Member() {
 //	}
 	
+	
+	
 	public Member(String username) {
 		this.username = username;
 	}
 
+	public Member(String username, int age) {
+		this.username = username;
+		this.age = age;
+	}
+	
 	public Member(String username, int age, Team team) {
 		this.username = username;
 		this.age = age;
 		if(team != null)
 			changeTeam(team);
 	}
+
 	
 }
