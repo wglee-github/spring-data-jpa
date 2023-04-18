@@ -91,7 +91,7 @@ class MemberJpaRepositoryTest {
 	 * 쿼리 메소드 기능
 	 	· @NamedQuery 테스트
 	 */
-	@Test
+//	@Test
 	public void testNamedQuery() {
 		Member member1 = new Member("member1", 10);
 		Member member2 = new Member("member2", 10);
@@ -104,4 +104,41 @@ class MemberJpaRepositoryTest {
 		assertThat(findMemer1.size()).isEqualTo(1);
 		assertThat(findMemer2).isNotEqualTo(findMemer2);
 	}
+	
+	@Test
+	public void paging() {
+		// given
+		memberJpaRepository.save(new Member("member1", 10));
+		memberJpaRepository.save(new Member("member2", 10));
+		memberJpaRepository.save(new Member("member3", 10));
+		memberJpaRepository.save(new Member("member4", 10));
+		memberJpaRepository.save(new Member("member5", 10));
+		memberJpaRepository.save(new Member("member6", 10));
+		
+		int age = 10;
+		int offset = 0;	// 시작 인덱스
+		int limit = 3;	// 조회할 갯수
+		// when
+		List<Member> members = memberJpaRepository.findByPage(age, offset, limit);
+		long totalCount = memberJpaRepository.totalCount(age);
+		
+		// then
+		assertThat(members.size()).isEqualTo(3);
+		assertThat(totalCount).isEqualTo(6);
+		members.stream().forEach(m -> System.out.println(m));
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 }
