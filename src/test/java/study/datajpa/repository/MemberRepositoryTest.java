@@ -18,8 +18,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.test.annotation.Rollback;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import study.datajpa.dto.MemberDto;
 import study.datajpa.entity.Member;
@@ -32,6 +35,7 @@ class MemberRepositoryTest {
 
 	@Autowired MemberRepository memberRepository;
 	@Autowired TeamRepository teamRepository;
+	@PersistenceContext EntityManager em;
 	
 	
 //	@Test
@@ -247,24 +251,18 @@ class MemberRepositoryTest {
 			· <U> Slice<U> map(Function<? super T, ? extends U> converter); //변환기	
 	 * 
 	 */
-	@Test
+//	@Test
 	public void paging() {
-//		Team team  = new Team("teamA");
-//		teamRepository.save(team);
+		Team team  = new Team("teamA");
+		teamRepository.save(team);
 		
 		// given
-		memberRepository.save(new Member("member1", 10));
-		memberRepository.save(new Member("member2", 10));
-		memberRepository.save(new Member("member3", 10));
-		memberRepository.save(new Member("member4", 10));
-		memberRepository.save(new Member("member5", 10));
-		memberRepository.save(new Member("member6", 10));
-//		memberRepository.save(new Member("member1", 10, team));
-//		memberRepository.save(new Member("member2", 10, team));
-//		memberRepository.save(new Member("member3", 10, team));
-//		memberRepository.save(new Member("member4", 10, team));
-//		memberRepository.save(new Member("member5", 10, team));
-//		memberRepository.save(new Member("member6", 10, team));
+		memberRepository.save(new Member("member1", 10, team));
+		memberRepository.save(new Member("member2", 10, team));
+		memberRepository.save(new Member("member3", 10, team));
+		memberRepository.save(new Member("member4", 10, team));
+		memberRepository.save(new Member("member5", 10, team));
+		memberRepository.save(new Member("member6", 10, team));
 		
 		int age = 10;
 		PageRequest pageRequest = PageRequest.of(0, 3, Sort.by(Direction.DESC, "username"));
@@ -281,32 +279,108 @@ class MemberRepositoryTest {
 		 * 
 		 */
 		// when
-//		Page<Member> page = memberRepository.findPageByAge(age, pageRequest);
-//		
-//		// then
-//		assertThat(page.getContent().size()).isEqualTo(3);
-//		assertThat(page.getTotalElements()).isEqualTo(6);
-//		assertThat(page.getNumber()).isEqualTo(0);
-//		assertThat(page.getTotalPages()).isEqualTo(2);
-//		assertThat(page.isFirst()).isTrue();
-//		assertThat(page.hasNext()).isTrue();
-//		
-//		
-//		// when slice는 요청한 limit + 1 을 요청한다. 더보기 페이징을 할 경우 사용.
-//		Slice<Member> pageSlice = memberRepository.findSliceByAge(age, pageRequest);
-//		
-//		// then
-//		assertThat(pageSlice.getContent().size()).isEqualTo(3);
-//		assertThat(pageSlice.getNumber()).isEqualTo(0);
-//		assertThat(pageSlice.isFirst()).isTrue();
-//		assertThat(pageSlice.hasNext()).isTrue();
-//		
-//		// 단순하게 리스트로 리턴타입 적용해서 받아도 됨
-//		List<Member> pageList = memberRepository.findListByAge(age, pageRequest);
+		Page<Member> page = memberRepository.findPageByAge(age, pageRequest);
 		
-		// 카운트 쿼리 분리
+		// then
+		assertThat(page.getContent().size()).isEqualTo(3);
+		assertThat(page.getTotalElements()).isEqualTo(6);
+		assertThat(page.getNumber()).isEqualTo(0);
+		assertThat(page.getTotalPages()).isEqualTo(2);
+		assertThat(page.isFirst()).isTrue();
+		assertThat(page.hasNext()).isTrue();
+		
+		
+		// when slice는 요청한 limit + 1 을 요청한다. 더보기 페이징을 할 경우 사용.
+		Slice<Member> pageSlice = memberRepository.findSliceByAge(age, pageRequest);
+		
+		// then
+		assertThat(pageSlice.getContent().size()).isEqualTo(3);
+		assertThat(pageSlice.getNumber()).isEqualTo(0);
+		assertThat(pageSlice.isFirst()).isTrue();
+		assertThat(pageSlice.hasNext()).isTrue();
+		
+		/**
+		 *  단순하게 리스트로 리턴타입 적용해서 받아도 됨
+		 */
+		// when
+		List<Member> pageList = memberRepository.findListByAge(age, pageRequest);
+		
+		/**
+		 *  카운트 쿼리 분리
+		 */
+		// when
 		Page<Member> pageCount = memberRepository.findCountQueryByAge(age, pageRequest);
 		System.out.println("size : "+pageCount.getContent().size());
 		System.out.println("totalCount : "+pageCount.getTotalElements());
+		
+		/**
+		 * 
+		 * Top, First 사용 참고
+			https://docs.spring.io/spring-data/jpa/docs/current/reference/html/#repositories.limitquery-result
+		 */ 
+		List<Member> top3Result = memberRepository.findTop3ByAge(age);
+		
+		/**
+		 * 페이지를 유지하면서 엔티티를 DTO로 변환하기
+		 * API의 response로 전달하면 페이징 정보도 같이 JSON으로 전달 된다.
+		 */
+		Page<Member> mePage = memberRepository.findPageByAge(age, pageRequest);
+		Page<MemberDto> mapDto = mePage.map(m -> new MemberDto(m.getId(), m.getUsername(), null));
 	}
+	
+	/**
+	 * 
+	 	* 벌크성 수정, 삭제 쿼리는 @Modifying 어노테이션을 사용
+			· 사용하지 않으면 다음 예외 발생
+			· org.hibernate.hql.internal.QueryExecutionRequestException: Not supported for DML operations
+			· 벌크성 쿼리를 실행하고 나서 영속성 컨텍스트 초기화: @Modifying(clearAutomatically = true)
+			  (이 옵션의 기본값은 false )
+			· 이 옵션 없이 회원을 findById 로 다시 조회하면 영속성 컨텍스트에 과거 값이 남아서 문제가 될 수 있다. 
+			· 만약 다시 조회해야 하면 꼭 영속성 컨텍스트를 초기화 하자.
+
+	 	* 참고: 벌크 연산은 영속성 컨텍스트를 무시하고 실행하기 때문에, 영속성 컨텍스트에 있는 엔티티의 상태와 DB에 엔티티 상태가 달라질 수 있다.
+
+	 	* 권장하는 방안
+ 			1. 영속성 컨텍스트에 엔티티가 없는 상태에서 벌크 연산을 먼저 실행한다.
+ 			2. 부득이하게 영속성 컨텍스트에 엔티티가 있으면 벌크 연산 직후 영속성 컨텍스트를 초기화 한다
+	 * 
+	 */
+	@Test
+	public void bulkUpdate() {
+		// given
+		memberRepository.save(new Member("member1", 10));
+		memberRepository.save(new Member("member2", 15));
+		memberRepository.save(new Member("member3", 20));
+		memberRepository.save(new Member("member4", 34));
+		memberRepository.save(new Member("member5", 40));
+		
+		// when
+		int age = 20;
+		int bulkCount = memberRepository.bulkAgePlus(age);
+		
+//		em.flush();
+//		em.clear();
+		
+		/**
+		 *  save 에서 member 정보를 저장하면서 영속성 컨텍스트(1차 캐시)에 저장 되었다.
+		 *  그래서 아래에서 JPQL로 조회를 하면 SQL은 나가겠지만 실제 데이터는 영속성 컨텍스트에서 가지고 오기 때문에
+		 *  bulkUpdate 에서 변경된 데이터를 얻어오지 못한다. 
+		 *  따라서 제대로된 검증을 하려면
+		 	1. em.clear(); 를 통해 1차 캐시를 삭제해준다. 혹시 모르니 flush();도 해주자.
+		   	2. repository에  @Modifying 에 clearAutomatically = true 를 선언해 주면 em.clear(); 를 해주지 않아도 된다.
+		   	   Ex. @Modifying(clearAutomatically = true) 
+		 */
+		List<Member> members3 = memberRepository.findByUsername("member3");
+		List<Member> members4 = memberRepository.findByUsername("member4");
+		List<Member> members5 = memberRepository.findByUsername("member5");
+		
+		System.out.println(members3.get(0).getAge());
+		
+		// then
+		assertThat(bulkCount).isEqualTo(3);
+		assertThat(members3.get(0).getAge()).isEqualTo(21);
+		assertThat(members4.get(0).getAge()).isEqualTo(35);
+		assertThat(members5.get(0).getAge()).isEqualTo(41);
+	}
+	
 }

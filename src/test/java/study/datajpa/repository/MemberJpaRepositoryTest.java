@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.NamedQuery;
 import study.datajpa.entity.Member;
 
@@ -19,7 +20,7 @@ import study.datajpa.entity.Member;
 class MemberJpaRepositoryTest {
 
 	@Autowired MemberJpaRepository memberJpaRepository;
-
+	@Autowired EntityManager em;
 	
 //	@Test
 	public void testMember() {
@@ -105,7 +106,7 @@ class MemberJpaRepositoryTest {
 		assertThat(findMemer2).isNotEqualTo(findMemer2);
 	}
 	
-	@Test
+//	@Test
 	public void paging() {
 		// given
 		memberJpaRepository.save(new Member("member1", 10));
@@ -129,7 +130,40 @@ class MemberJpaRepositoryTest {
 	}
 	
 	
-	
+	@Test
+	public void bulkUpdate() {
+		// given
+		memberJpaRepository.save(new Member("member1", 10));
+		memberJpaRepository.save(new Member("member2", 15));
+		memberJpaRepository.save(new Member("member3", 20));
+		memberJpaRepository.save(new Member("member4", 34));
+		memberJpaRepository.save(new Member("member5", 40));
+		
+		// when
+		int age = 20;
+		int bulkCount = memberJpaRepository.bulkAgePlus(age);
+		
+//		em.flush();
+//		em.clear();
+		/**
+		 *  1. save 에서 member 정보를 저장하면서 영속성 컨텍스트(1차 캐시)에 저장 되었다.
+		 *  2. 그리고 bulkUpdate 에서 JPQL이 실행되어 flush가 일어나서 Member의 save 쿼리도 DB에 전달 된다.
+		 *  3. 그런데 아래 조회 JPQL의 경우 SQL은 나가겠지만 실제 데이터는 영속성 컨텍스트에서 가지고 오기 때문에
+		 *     bulkUpdate 에서 변경된 데이터를 얻어오지 못한다. 
+		 *  4. 따라서 제대로된 검증을 하려면 em.clear(); 를 통해 1차 캐시를 삭제해 줘야 한다. 혹시 모르니 flush();도 해주자.
+		 */
+		List<Member> members3 = memberJpaRepository.findByUsername("member3");
+		List<Member> members4 = memberJpaRepository.findByUsername("member4");
+		List<Member> members5 = memberJpaRepository.findByUsername("member5");
+		
+		System.out.println(members3.get(0).getAge());
+		
+		// then
+		assertThat(bulkCount).isEqualTo(3);
+		assertThat(members3.get(0).getAge()).isEqualTo(21);
+		assertThat(members4.get(0).getAge()).isEqualTo(35);
+		assertThat(members5.get(0).getAge()).isEqualTo(41);
+	}
 	
 	
 	

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -61,6 +62,20 @@ public interface MemberRepository extends JpaRepository<Member, Long>{
 	 * value애 작성한 쿼리의 결과 값이 null인 경우. countQuery 안나감  
 	 * 
 	 */  
-	@Query(value = "select m from Member m right join fetch m.team t where m.age = :age", countQuery = "select count(m) from Member m")
+	@Query(value = "select m from Member m left join fetch m.team t where m.age = :age", 
+			countQuery = "select count(m) from Member m")
 	Page<Member> findCountQueryByAge(@Param("age") int age, Pageable pageable);
+
+	List<Member> findTop3ByAge(int age);
+	
+	/**
+	 * 
+	 *  벌크성 수정, 삭제 쿼리는 @Modifying 어노테이션을 사용
+			· 사용하지 않으면 다음 예외 발생
+			· org.hibernate.hql.internal.QueryExecutionRequestException: Not supported for DML operations
+	 */
+	@Modifying(clearAutomatically = true)
+	@Query("update Member m set m.age = m.age + 1 where m.age >= :age")
+	int bulkAgePlus(@Param("age") int age);
+	
 }
