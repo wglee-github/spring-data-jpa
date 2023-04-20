@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,10 +19,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.test.annotation.Rollback;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import study.datajpa.dto.MemberDto;
@@ -345,7 +349,7 @@ class MemberRepositoryTest {
  			2. 부득이하게 영속성 컨텍스트에 엔티티가 있으면 벌크 연산 직후 영속성 컨텍스트를 초기화 한다
 	 * 
 	 */
-	@Test
+//	@Test
 	public void bulkUpdate() {
 		// given
 		memberRepository.save(new Member("member1", 10));
@@ -382,5 +386,68 @@ class MemberRepositoryTest {
 		assertThat(members4.get(0).getAge()).isEqualTo(35);
 		assertThat(members5.get(0).getAge()).isEqualTo(41);
 	}
+	
+	/**
+	 * (fetch = FetchType.EAGER)
+	 * EAGER 는 Member와 Team을join 해서 가지고 오는게 아니라 Member 조회 쿼리 나가고 바로 Team 쿼리 나가는 방식이다. 헷갈리지 말자. join 아니다!
+	 * 
+	 * (fetch = FetchType.LAZY)
+	 * LAZY 참조 객체의 식별자를 호출 시, Team 객체의 getName() 호출 시 쿼리가 나가는 방식. 그 전까지 Team객체는 proxy 객체이다.
+	 */
+	@Test
+	public void findMemberLazy() {
+		
+		// given
+		Team teamA = new Team("teamA");
+		Team teamB = new Team("teamB");
+		teamRepository.save(teamA);
+		teamRepository.save(teamB);
+		
+		Member member1 = new Member("member1", 10, teamA);
+		Member member2 = new Member("member2", 10, teamA);
+		memberRepository.save(member1);
+		memberRepository.save(member2);
+		
+		em.flush();
+		em.clear();
+		
+		// when
+		/**
+		 * 일반 조인과 Fetch 조인의 차이
+		 * 
+		 * @Query("select m from Member m left join m.team t") -> left join을 하면 select m from member 로 나가고 join 쿼리가 나가지 않음.
+		 * 일반 조인은 Member 객체 정보만 조회한다. select 파라미터에 Member 컬럼만 있음.
+		 * 
+		 * @Query("select m from Member m left join fetch m.team t")
+		 * fetch 조인은 Member 객체정보를 조회 할 때 연관된(조인한) Team 객체 정보도 같이 한번에 조회한다.
+		 * select 파라미터에 Member 컬럼, Team 컬럼 모두 있음. 
+		 */
+//		List<Member> members = memberRepository.findMemberFetchJoin();
+		
+		/**
+		 * 
+		 * @EntityGraph  @NamedEntityGraph
+		 * JPA에서 제공. JPA 표준 스펙
+		 * 
+		 *  JPA에서 제공하는 메소도 오버라이드해서 @EntityGraph 적용 가능
+		 */
+//		List<Member> members = memberRepository.findAll();
+		
+		// JPQL에 기본 쿼리만 작성하고, @EntityGraph 적용 가능
+//		List<Member> members = memberRepository.findMemberEntityGraph();
+		
+		// 메소드 이름으로 쿼리 생성 한 경우에도 @EntityGraph 적용 가능
+		List<Member> members = memberRepository.findEntityGraphByUsername("member1");
+		
+		for (Member member : members) {
+			System.out.println("member = " + member);
+			System.out.println("member.team = " + member.getTeam().getClass());
+			System.out.println("member.team.name = " + member.getTeam().getName());
+		}
+		
+		// then
+		
+	}
+	
 	
 }

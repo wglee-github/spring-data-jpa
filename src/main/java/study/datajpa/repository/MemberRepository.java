@@ -7,11 +7,13 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.NamedEntityGraph;
 import study.datajpa.dto.MemberDto;
 import study.datajpa.entity.Member;
 
@@ -77,5 +79,38 @@ public interface MemberRepository extends JpaRepository<Member, Long>{
 	@Modifying(clearAutomatically = true)
 	@Query("update Member m set m.age = m.age + 1 where m.age >= :age")
 	int bulkAgePlus(@Param("age") int age);
+
+	@Query("select m from Member m left join fetch m.team t")
+	List<Member> findMemberFetchJoin();
+
+	/**
+	 * @EntityGraph
+	 * JPA에서 제공하는 기능.
+	 * 
+	 * @EntityGraph(attributePaths = {"team"})
+	 * Member 조회 시 team에 대해서 fetch 조인을 한다.
+	 * @EntityGraph 를 선언하여 fetch 조인 하는 경우 기본적으로 left join 으로 조회한다.
+	 */
+	@Override
+	@EntityGraph(attributePaths = {"team"})
+	List<Member> findAll();
 	
+	/**
+	 * 기본 JPQL을 작성 한 후에도 @EntityGraph(attributePaths = {"team"}) 를 적용하여 fetch 조인으로 조회 할 수 있다.
+	 */
+	@EntityGraph(attributePaths = {"team"})
+	@Query("select m from Member m")
+	List<Member> findMemberEntityGraph();
+	
+	/**
+	 * 메소드 이름 쿼리 생성하는 거에도 @EntityGraph(attributePaths = {"team"}) 적용하면 fetch 조인으로 조회 할 수 있다.
+	 */
+//	@EntityGraph(attributePaths = {"team"})
+	/**
+	 *	@NamedEntityGraph 
+	 *	Member class 위에 선언.
+	 *  class에 아예 선언해 놓고 사용하는 방식. 아래 처럼 @NamedEntityGraph 에 선언한 name을 @EntityGraph 에서 호출해 주면 됨.
+	 */
+	@EntityGraph("Member.all")
+	List<Member> findEntityGraphByUsername(String username);
 }

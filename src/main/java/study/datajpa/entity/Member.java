@@ -1,5 +1,7 @@
 package study.datajpa.entity;
 
+import org.springframework.data.jpa.repository.EntityGraph;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -7,6 +9,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
 import jakarta.persistence.NamedNativeQuery;
 import jakarta.persistence.NamedQueries;
 import jakarta.persistence.NamedQuery;
@@ -22,6 +26,7 @@ import lombok.ToString;
 @ToString(of = {"id", "username", "age"})
 // @NamedQuery 장점 - 애플리케이션 로딩 시점에 해당 쿼리를 한번 파싱해 본다. 따라서 문법 오류가 있는경우 오류를 알려주고, 애플리케이션 로딩 되지 않음.
 @NamedQuery(name = "Member.findByUsername", query = "select m from Member m where m.username = :username")
+@NamedEntityGraph(name = "Member.all", attributeNodes = @NamedAttributeNode("team")) // Member 조회 시 team은 무조건 조회하는 설정. 해당 name을 @EntityGraph 에서 호출하여 사용 가능
 public class Member {
 
 	@Id @GeneratedValue
