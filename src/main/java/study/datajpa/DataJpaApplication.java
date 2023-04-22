@@ -1,8 +1,13 @@
 package study.datajpa;
 
+import java.util.Optional;
+import java.util.UUID;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.context.annotation.Bean;
+import org.springframework.data.domain.AuditorAware;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
 /**
  *  @EnableJpaRepositories 
@@ -15,6 +20,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  *  · 또한 @SpringBootApplication 선언된 패키지 하위의 모든 패키지를 알아서 스캔합니다.
  */
 //@EnableJpaRepositories(basePackages = "패키지경로")
+@EnableJpaAuditing
 @SpringBootApplication
 public class DataJpaApplication {
 
@@ -22,4 +28,13 @@ public class DataJpaApplication {
 		SpringApplication.run(DataJpaApplication.class, args);
 	}
 
+	/**
+	 * @CreatedBy @LastModifiedBy 를 선언한 필드에 아래 메소드의 리턴값을 넣어준다.
+	 * 메소드명은 아무거나 적어도 됨 
+	 */
+	@Bean
+	public AuditorAware<String> auditorProvider(){
+		return () -> Optional.of(UUID.randomUUID().toString());
+	}
+	
 }

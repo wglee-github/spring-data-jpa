@@ -130,7 +130,7 @@ class MemberJpaRepositoryTest {
 	}
 	
 	
-	@Test
+//	@Test
 	public void bulkUpdate() {
 		// given
 		memberJpaRepository.save(new Member("member1", 10));
@@ -166,13 +166,37 @@ class MemberJpaRepositoryTest {
 	}
 	
 	
-	
-	
-	
-	
-	
-	
-	
+	/**
+	 * 순수 JPA
+	 * 
+	 * 공통 컬럼이 존재하는 경우 별도의 class로 분리할 수 있다.
+	 * 그리고 분리한 class에 @MappedSuperclass 를 선언해 주면 된다.
+	 */
+	@Test
+	public void jpaEventBaseEntity() throws Exception {
+		// given
+		Member member = new Member("member1");
+		memberJpaRepository.save(member); //@PrePersist 실행
+		
+		Thread.sleep(1000);
+		member.setUsername("member2");
+//		System.out.println("member createDate = " + member.getCreateDate());
+//		System.out.println("member updateDate 1 = " + member.getUpdateDate());
+		
+		em.flush(); //@PreUpdate 실행
+//		System.out.println("member updateDate 2 = " + member.getUpdateDate());
+		em.clear();
+		
+		
+		// when
+		Member findMember = memberJpaRepository.findById(member.getId()).get();
+		
+		
+		// then
+		System.out.println("findmember username = " + findMember.getUsername());
+		// Member class에 JpaBaseEntity 를 상속받으면 된다.
+//		System.out.println("findmember updateDate = " + findMember.getUpdateDate());
+	}
 	
 	
 }

@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,19 +21,38 @@ import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.test.annotation.Rollback;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import study.datajpa.dto.MemberDto;
+import study.datajpa.dto.UsernameOnlyDto;
 import study.datajpa.entity.Member;
 import study.datajpa.entity.Team;
 
 @SpringBootTest
+
+/**
+ * 
+ 	* @Transactional 트랜잭션 적용
+		· JPA의 모든 변경은 트랜잭션 안에서 동작
+		· 스프링 데이터 JPA는 변경(등록, 수정, 삭제) 메서드를 트랜잭션 안에서 처리한다.
+		· 서비스 계층에서 트랜잭션을 시작하지 않으면 리파지토리에서 트랜잭션 시작
+		· 서비스 계층에서 트랜잭션을 시작하면 리파지토리는 해당 트랜잭션을 전파 받아서 사용
+		· 그래서 스프링 데이터 JPA를 사용할 때 트랜잭션이 없어도 데이터 등록, 변경이 가능했음(사실은
+		· 트랜잭션이 리포지토리 계층에 걸려있는 것임) 
+		
+	* @Transactional(readOnly = true)
+		· 데이터를 단순히 조회만 하고 변경하지 않는 트랜잭션에서 readOnly = true 옵션을 사용하면 플러시를 생략해서 DB에 데이터를 보내지 않는다. 
+		  이로 인해 약간의 성능 향상을 얻을 수 있음	
+ *
+ */
 @Transactional
 @Rollback(false)
 class MemberRepositoryTest {
@@ -41,6 +61,12 @@ class MemberRepositoryTest {
 	@Autowired TeamRepository teamRepository;
 	@PersistenceContext EntityManager em;
 	
+	private MemberQueryRepository memberQueryRepository;
+	
+	@Autowired
+	public MemberRepositoryTest(MemberQueryRepository memberQueryRepository) {
+		this.memberQueryRepository = memberQueryRepository;
+	}
 	
 //	@Test
 	void testMember() {
@@ -394,7 +420,7 @@ class MemberRepositoryTest {
 	 * (fetch = FetchType.LAZY)
 	 * LAZY 참조 객체의 식별자를 호출 시, Team 객체의 getName() 호출 시 쿼리가 나가는 방식. 그 전까지 Team객체는 proxy 객체이다.
 	 */
-	@Test
+//	@Test
 	public void findMemberLazy() {
 		
 		// given
@@ -449,5 +475,318 @@ class MemberRepositoryTest {
 		
 	}
 	
+	/**
+	 *
+	 	* JPA Hint : 진짜 트래픽이 많은 곳을 선별해서 
+   			· JPA 쿼리 힌트(SQL 힌트가 아니라 JPA 구현체에게 제공하는 힌트)
+   		
+   			· 변경감지(dirty checking)를 위해서는 원본과 수정본 두개를 관리해야한다.
+   			· 그렇다는건 그만큼 메모리를 사용한다는 뜻인데, 변경감지를 사용하지 않도록 Hint를 사용하여 조회만 할 수 있다.
+	 
+	 	* 참고
+		  · 성능테스트 해보고 결정하면 된다.
+		  · 전체 애플리케이션에 최적화 한다고 readOnly 옵션을 다 넣고 최적화 한다고 해봐야 큰 이점이 없다.
+		  · 전체 애플리케이션 중 성능 이슈가 가장 많이 발생하는 곳이 복잡한 쿼리로 조회하는 경우가 대부분이다.
+		  · 이때 해당 쿼리를 공수를 들여서 튜닝을 할건지는 고민해 봐야 한다. 결국 성능테스트를 해보고 정말 중요한 몇 곳만 추려서 해당 튜닝이 이점이 있는 경우에만 적용하는게 좋다.
+		  · 그리고 진짜 중요한 쿼리인데 조회성능 이슈가 있으면 이미 cache를 활용하든, redis를 사용해서 풀어야 하는게 맞을 수도 있다.
+		  · 좋아 보여서 처음부터 튜닝을 싹 하는건 좋지않은 접근이다.  
+	 * 
+	 */
+//	@Test
+	public void queryHint() {
+		// given
+		Member member = new Member("member1");
+		memberRepository.save(member);
+
+		em.flush();
+		em.clear();
+		
+		// when
+		Member findMember =  memberRepository.findReadOnlyByUsername(member.getUsername());
+		findMember.setUsername("member2"); 
+
+		// 필수 값 아님. 마치 flush 해야 업데이트 쿼리 실행되는것 처럼 말함. ㅠ
+		// @Transactional 선언하면 메소드 끝날때 자동으로 flush 일어남.
+		// 설명을 직관적으로 하려고 사용한듯 ( 헷갈릴뻔 했잖아.. ㅡ.ㅡ)
+		em.flush(); // update 쿼리 실행되지 않는다.
+	}
 	
+	/**
+	 * select for update
+	 * 실시간 트래픽이 많은 서비스에서도 가급적 lock을 사용하면 안된다.
+	 * PESSIMISTIC : 실제 락을 건다
+	 * OPTIMISTIC : 실제 락을 걸지 않고 처리? 
+	 * 
+	 */
+//	@Test
+	public void lock() {
+		// given
+		Member member = new Member("member1");
+		memberRepository.save(member);
+
+		em.flush();
+		em.clear();
+		
+		// when
+		List<Member> members =  memberRepository.findLockByUsername("member1");
+	}
+	
+	/**
+	 * 
+	 * 사용자 정의 리포지토리
+	 * - JpaRepository를 상속받은 MemberRepository에 새로운 메소드를 정의하여 직접 구현하고 싶은경우
+	 * - MemberRepository는 인터페이스 이기때문에 새롭게 메소드를 정의한 후 구현하기 위해서는 MemberRepository 인터페이스를 implements 해야한다.
+	 * - 그러면 기존에 MemberRepository에 선언한 모든 메소드 + 상속받은 JpaRepository 메소드 까지 모두 구현해야 한다. 이해되지? 
+	 * - 따라서 별도의 인터페이스와 구현클래스를 생성해서 활용하는 방법을 알아보자
+	 * 
+	 * 1. 사용자 정의 interface A를 만든다.
+	 * 2. A interface의 구현체 클래스를 만든다.
+	 * - 클래스명은 기존 리포지토리명 + Impl 로 지어줘야 한다. 그러면 스프링 데이터 JPA가 인식해서 스프링 빈으로 등록해 준다.
+	 * 3. JpaRepository를 상속받은 기존 인터페이스에 extends A 인터페이스를 상속 받는다. 
+	 * 
+	 * Ex. MemberRepository 에서 사용할 사용자 정의 리포지토리를 만든다고 가정하면
+	 	  1. MemberRepositoryCustom : 사용자 정의 interface를 만든다
+	 	  2. MemberRepositoryImpl : 사용자 정의 interface 구현체 클래스를 만든다.
+	 	  3. public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom 이렇게 해주면 됨.
+	 	  
+	 	  
+		참고: 실무에서는 주로 QueryDSL이나 SpringJdbcTemplate을 함께 사용할 때 사용자 정의 리포지토리 기능 자주 사용한다.
+		
+		* 참고 
+			· 항상 사용자 정의 리포지토리가 필요한 것은 아니다. 그냥 임의의 리포지토리를 만들어도 된다. 
+			
+			· 핵심 비지니스 로직 repository와 화면에 맞춘 복잡한 쿼리 용 repository는 분리하는게 좋다. 
+				· 사용자 정의 리포지토리 활용법을 사용하여 한곳에 다 넣으면 복잡도가 높은 올라간다.
+				· 핵심 비지니스 로직 repository는 수정할 이슈가 많지 않지만
+				· 화면에 맞춘 복잡한 쿼리용 repository 수정 이슈가 많다. 
+			
+			· 예를들어 MemberQueryRepository를 인터페이스가 아닌 클래스로 만들고 스프링 빈으로 등록해서
+			· 그냥 직접 사용해도 된다. 물론 이 경우 스프링 데이터 JPA와는 아무런 관계 없이 별도로 동작한다
+	 	  
+	 */
+//	@Test
+	public void callCustom() {
+		// given
+		Member member = new Member("member1");
+		memberRepository.save(member);
+		
+		em.flush();
+		em.clear();
+		
+		// when
+		List<Member> members =  memberRepository.findMemberCustom();
+	}
+	
+	/**
+	 * 화면에 맞춘 쿼리나, 복잡한 조회 쿼리 등은 repository를 분리해서 사용하자
+	 */
+//	@Test
+	public void queryRepository() {
+		new MemberRepositoryTest(new MemberQueryRepository(em));
+		memberQueryRepository.findAllMembers();
+	}
+	
+	/**
+	 * 
+	 * spring main class에 @EnableJpaAuditing 선언해줘야 한다.
+	 * 
+	 * 공통 컬럼이 존재하는 경우 별도의 class로 분리할 수 있다.
+	 * 그리고 분리한 class에 @MappedSuperclass 를 선언해 주면 된다.
+	 * 
+	 
+	 * 참고
+	 	· 저장시점에 등록일, 등록자는 물론이고, 수정일, 수정자도 같은 데이터가 저장된다. 
+	 	· 데이터가 중복 저장되는 것 같지만, 이렇게 해두면 변경 컬럼만 확인해도 마지막에 업데이트한 유저를 확인 할 수 있으므로 유지보수 관점에서 편리하다. 
+	 	· 이렇게 하지 않으면 변경 컬럼이 null 일때 등록 컬럼을 또 찾아야 한다.
+	
+	 * 참고 
+	 	· 저장시점에 저장데이터만 입력하고 싶으면 spring main clas에 @EnableJpaAuditing(modifyOnCreate = false) 옵션을 사용하면 된다.
+	 * 
+	 */
+//	@Test
+	public void baseEntity() throws Exception {
+		// given
+		Member member = new Member("member1");
+		memberRepository.save(member); //@PrePersist 실행
+		
+		Thread.sleep(1000);
+//		member.setUsername("member2");
+//		System.out.println("member createDate = " + member.getCreateDate());
+//		System.out.println("member updateDate 1 = " + member.getUpdateDate());
+		
+		em.flush(); //@PreUpdate 실행
+//		System.out.println("member updateDate 2 = " + member.getUpdateDate());
+		em.clear();
+		
+		
+		// when
+		Member findMember = memberRepository.findById(member.getId()).get();
+		
+		
+		// then
+		System.out.println("findmember username = " + findMember.getUsername());
+		System.out.println("findmember lastModifiedDate = " + findMember.getLastModifiedDate());
+		System.out.println("findmember createBy = " + findMember.getCreateBy());
+		System.out.println("findmember lastModifiedBy = " + findMember.getLastModifiedBy());
+	}
+	
+	/**
+	 * 
+	 * 우선 class 상단에 @Transactional 주석처리 한 후 테스트 해야한다.
+	 * 
+	 * memberRepository 의 save는 JpaRepository의 구현체 메소드를 사용한다.
+	 * 내부적으로 들어가보며 save 메소드에 @Transactional 이 선언되어 있는걸 볼 수 있다.
+	 * 그래서 별도의 @Transactional 를 선언하지 않아도 저장이 되는 것이다.
+	 * 그런데 영속성 컨텍스트 입장에서 보면 동일한 transaction 내에서는 엔티티의 동일성을 보장해준다.
+	 * 그래서 save를 실행한 후에는 transaction이 끝나기 때문에 이후의 영속성 컨텍스트도 사라지게 된다.
+	 * 따라서 로직을 구현할 때 이 부분을 주의해서 작성해야 한다.
+	 * 
+	 * 아래 save 와 findById는 다른 transaction 이다.
+	 * 
+	 */
+//	@Test
+	public void persistenceContextTest() {
+		Member member = new Member("member1");
+		
+		memberRepository.save(member); // insert 쿼리 생성
+		
+		Member findMember = em.find(Member.class, member.getId());	// select 쿼리 생성 ( 같은 transaction 내에 없기 때문에 조히 할 때 마다 쿼리가 나간다)
+		Member findMember2 = em.find(Member.class, member.getId()); // select 쿼리 생성 ( 같은 transaction 내에 없기 때문에 조히 할 때 마다 쿼리가 나간다)
+		
+//		Member findMember = memberRepository.findById(member.getId()).get(); // select 쿼리 생성
+		System.out.println(" findMember = " + findMember);
+		
+	}
+	
+	/**
+	 * 
+	 	* Projections - 인터페이스
+		 	· 엔티티 대신에 DTO를 편리하게 조회할 때 사용
+			· 전체 엔티티가 아니라 만약 회원 이름만 딱 조회하고 싶으면?
+			
+		· Closed Projections
+			· Ex. String getUsername(); getter 메소드를 필드명에 맞게 잘 생성해 주면 된다. 
+			· 매칭 되는 필드만 DB에서 조회해 온다. select username from member;
+		· Open Projections
+			· Ex. 메소드 위에 @Value("#{target.username + ' ' + target.age}") 를 적어 주면 된다.	
+			· 단! 이렇게 SpEL문법을 사용하면, DB에서 엔티티 필드를 다 조회해온 다음에 계산한다! 따라서 JPQL SELECT 절 최적화가 안된다.
+			  select * from member;
+	 */
+//	@Test
+	public void projectionsInf() {
+		Team teamA = new Team("teamA");
+		teamRepository.save(teamA);
+		
+		Member member1 = new Member("member1", 0, teamA);
+		Member member2 = new Member("member2", 0, teamA);
+		memberRepository.save(member1);
+		memberRepository.save(member2);
+		
+		em.flush();
+		em.clear();
+		
+		List<UsernameOnly> usernameOnlies = memberRepository.findProjectionsByUsername("member1");
+		for (UsernameOnly usernameOnly : usernameOnlies) {
+			System.out.println("usernameOnly = " + usernameOnly.getUsername());
+		}
+		
+	}
+	
+	/**
+	 * 
+	 	* Projection - 클래스 기반
+	 		· 생성자의 파라미터 이름으로 매칭
+	 */
+//	@Test
+	public void projectionsDTO() {
+		Team teamA = new Team("teamA");
+		teamRepository.save(teamA);
+		
+		Member member1 = new Member("member1", 10, teamA);
+		Member member2 = new Member("member2", 20, teamA);
+		memberRepository.save(member1);
+		memberRepository.save(member2);
+		
+		em.flush();
+		em.clear();
+		
+		List<UsernameOnlyDto> usernameOnlies = memberRepository.findProjectionsDTOByUsername("member1");
+		for (UsernameOnlyDto usernameOnly : usernameOnlies) {
+			System.out.println("usernameOnly = " + usernameOnly.getUsername());
+			System.out.println("usernameOnly = " + usernameOnly.getAge());
+		}
+		
+	}
+	
+	/**
+	 * 
+	 	* Projection - 동적
+	 		·  Generic type을 주면, 동적으로 프로젝션 데이터 번경 가능
+	 */
+//	@Test
+	public void projectionsGeneric() {
+		Team teamA = new Team("teamA");
+		teamRepository.save(teamA);
+		
+		Member member1 = new Member("member1", 10, teamA);
+		Member member2 = new Member("member2", 20, teamA);
+		memberRepository.save(member1);
+		memberRepository.save(member2);
+		
+		/**
+		 * 해당 메소드는 entitymanger를 직접 사용하는게 아니기 때문에 repository 별로 Transaction이 분리되어 있다.  
+		 * save() 메소드 별로 각각 독립된 Transaction이다.
+		 * 그런데 지금 테스트를 위해 MemberRepository class에 @Transactional 를 선언했기 때문에 해당 메소드 안에서는 영속성 컨텍스트가 공유가 된다.
+		 * 그래서 이런 케이스인 경우에만 em.flush(); em.clear(); 가 의미가 있다.
+		 * 
+		 * 현재 해당 class의 상단에 @Transactional 이 없어도 동작에는 전혀 문제가 없다.
+		 */
+		em.flush();
+		em.clear();
+		
+		List<UsernameOnlyDto> usernameOnlyDtos = memberRepository.findProjectionsGenericByUsername("member1", UsernameOnlyDto.class);
+		for (UsernameOnlyDto usernameOnly : usernameOnlyDtos) {
+			System.out.println("UsernameOnlyDto username = " + usernameOnly.getUsername());
+			System.out.println("UsernameOnlyDto age = " + usernameOnly.getAge());
+		}
+		
+		List<UsernameOnly> usernameOnlies = memberRepository.findProjectionsGenericByUsername("member2", UsernameOnly.class);
+		for (UsernameOnly usernameOnly : usernameOnlies) {
+			System.out.println("UsernameOnly username = " + usernameOnly.getUsername());
+			System.out.println("UsernameOnly age = " + usernameOnly.getAge());
+		}
+		
+	}
+	
+	/**
+	 * Native Query Projections
+	 * 
+	 * 네이티브 쿼리를 활용하여 projections를 사용.
+	 * 
+	 */
+	@Test
+	public void nativeQuery() {
+		Team teamA = new Team("teamA");
+		teamRepository.save(teamA);
+		
+		Member member1 = new Member("member1", 10, teamA);
+		Member member2 = new Member("member2", 20, teamA);
+		memberRepository.save(member1);
+		memberRepository.save(member2);
+		
+		em.flush();
+		em.clear();
+		
+		Page<MemberProjections> page = memberRepository.findByNativeQuery(PageRequest.of(0, 10));
+		List<MemberProjections> projections = page.getContent();
+		
+		for (MemberProjections memberProjections : projections) {
+			System.out.println("memberProjections id = " + memberProjections.getId());
+			System.out.println("memberProjections usernmae = " + memberProjections.getUsername());
+			System.out.println("memberProjections teamName = " + memberProjections.getTeamName());
+		}
+		
+		
+		
+	}
 }

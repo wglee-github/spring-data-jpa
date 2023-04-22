@@ -9,15 +9,21 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.NamedEntityGraph;
+import jakarta.persistence.QueryHint;
+import net.bytebuddy.description.type.TypeDescription.Generic;
 import study.datajpa.dto.MemberDto;
+import study.datajpa.dto.UsernameOnlyDto;
 import study.datajpa.entity.Member;
 
-public interface MemberRepository extends JpaRepository<Member, Long>{
+public interface MemberRepository extends JpaRepository<Member, Long>, MemberRepositoryCustom{
 
 	List<Member> findByUsernameAndAgeGreaterThan(String username, int age);
  	
@@ -113,4 +119,44 @@ public interface MemberRepository extends JpaRepository<Member, Long>{
 	 */
 	@EntityGraph("Member.all")
 	List<Member> findEntityGraphByUsername(String username);
+	
+	/**
+	 * 
+	 */
+	@QueryHints(value =  @QueryHint(name = "org.hibernate.readOnly", value = "true"))
+	Member findReadOnlyByUsername(String username);
+	
+	@Lock(LockModeType.OPTIMISTIC)
+	List<Member> findLockByUsername(String username);
+	
+	/**
+	 * 
+	 *  org.springframework.data.jpa.repository.QueryHints 어노테이션을 사용 
+	 *  forCounting : 반환 타입으로 Page 인터페이스를 적용하면 추가로 호출하는 페이징을 위한 count 
+	 *  쿼리도 쿼리 힌트 적용(기본값 true )
+	 */
+	@QueryHints(value = {@QueryHint(name = "org.hibernate.readOnly", value = "true")}, forCounting = true)
+	Page<Member> findLockPageByUsername(String username, Pageable pageable);
+	
+	/**
+	 * interface 기반 projections 
+	 */
+	List<UsernameOnly> findProjectionsByUsername(@Param("username") String username);
+	
+	/**
+	 * class 기반 projections 
+	 */
+	List<UsernameOnlyDto> findProjectionsDTOByUsername(@Param("username") String username);
+	
+	/**
+	 * 동적 projections
+	 */
+	<T> List<T> findProjectionsGenericByUsername(@Param("username") String username, Class<T> type);
+	
+	/**
+	 * native query projections
+	 */
+	@Query(value = "select m.member_id as id, m.username, t.name as teamName from member m left join team t", 
+			countQuery = "select count(*) from member", nativeQuery = true)
+	Page<MemberProjections> findByNativeQuery(Pageable pageable);
 }
